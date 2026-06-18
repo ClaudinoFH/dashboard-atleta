@@ -33,7 +33,7 @@ def carregar_dados():
 def salvar_registro_no_sheets(novo_registro):
     """Envia os dados para o Sheets simulando o preenchimento do Google Forms"""
     # ⚠️ SUBSTITUA COM O SEU LINK formResponse DO PASSO 2
-    URL_FORM = "https://docs.google.com/forms/d/e/1FAIpQLSeKgnnhegCaBD-8uLG15xsx4iD-u5qyW3gbz13GB4mV_SFrfw/formResponse"
+    URL_FORM = "https://docs.google.com/forms/d/e/1FAIpQLSdbXjBmj4skxo0xyaNVA18AQqXHMAz5qB586zih7U7XrknmbA/formResponse"
     
     # ⚠️ SUBSTITUA OS CODIGOS 'entry.XXXXX' COM OS SEUS CÓDIGOS REAIS DO FORMULÁRIO
     payload = {
