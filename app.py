@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import date
-from streamlit_gsheets import GSheetsConnection
+import requests
 
 # 1. Configuração da Página
 st.set_page_config(page_title="Dashboard Atleta 35+", layout="wide", initial_sidebar_state="expanded")
@@ -13,18 +13,10 @@ st.set_page_config(page_title="Dashboard Atleta 35+", layout="wide", initial_sid
 # Link da sua planilha do Google Sheets
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1_JvyORAjiFa5DzhB2-VOvb0QTbWOZmX2hbOnaHShumE/edit?usp=sharing"
 
-# Criando a conexão oficial com o Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
-
 def carregar_dados():
-    """Lê os dados em tempo real da planilha do Google Sheets usando o conector"""
+    """Lê os dados em tempo real convertidos em CSV da planilha pública"""
     try:
-        # Lê os dados da aba chamada 'historico'
-        df_sheets = conn.read(spreadsheet=URL_PLANILHA, worksheet="historico", ttl="0d")
-        
-        # Remove linhas totalmente vazias se houverem
-        df_sheets = df_sheets.dropna(how="all")
-        
+        df_sheets = pd.read_csv(URL_PLANILHA, keep_default_na=False)
         # Garante a tipagem correta para evitar erros nos gráficos
         df_sheets["Peso"] = pd.to_numeric(df_sheets["Peso"], errors='coerce').fillna(81.2)
         df_sheets["Sono"] = pd.to_numeric(df_sheets["Sono"], errors='coerce').fillna(6.0)
@@ -34,31 +26,42 @@ def carregar_dados():
         df_sheets["Ritmo_Min_Km"] = pd.to_numeric(df_sheets["Ritmo_Min_Km"], errors='coerce').fillna(0.0)
         return df_sheets
     except Exception as e:
-        # Fallback de segurança com seu histórico simulado caso a planilha esteja vazia na primeira vez
         return pd.DataFrame([
             {"Data": "2026-06-08", "Peso": 81.2, "Treino": "Sim", "Sono": 6.0, "Energia": 4, "Dor_Lombar": 0, "Agua_Copos": 8, "Km_Corrida": 2.87, "Ritmo_Min_Km": 4.12, "Tipo_Treino": "Tiros / Intervalado", "Detalhe_Treino": "Corrida: Ritmo Forte"}
         ])
 
 def salvar_registro_no_sheets(novo_registro):
-    """Atualiza a planilha do Google Sheets adicionando a nova linha de verdade"""
-    # Pega o dataframe atualizado da memória
-    df_atual = st.session_state.historico_local
+    """Envia os dados para o Sheets simulando o preenchimento do Google Forms"""
+    # ⚠️ SUBSTITUA COM O SEU LINK formResponse DO PASSO 2
+    URL_FORM = "https://docs.google.com/forms/d/e/1FAIpQLSeKgnnhegCaBD-8uLG15xsx4iD-u5qyW3gbz13GB4mV_SFrfw/formResponse"
     
-    # Cria um dataframe com a nova linha e junta com o antigo
-    df_novo_registro = pd.DataFrame([novo_registro])
-    df_final = pd.concat([df_atual, df_novo_registro], ignore_index=True)
+    # ⚠️ SUBSTITUA OS CODIGOS 'entry.XXXXX' COM OS SEUS CÓDIGOS REAIS DO FORMULÁRIO
+    payload = {
+        "entry.1": novo_registro["Data"],
+        "entry.2": novo_registro["Peso"],
+        "entry.3": novo_registro["Treino"],
+        "entry.4": novo_registro["Sono"],
+        "entry.5": novo_registro["Energia"],
+        "entry.6": novo_registro["Dor_Lombar"],
+        "entry.7": novo_registro["Agua_Copos"],
+        "entry.8": novo_registro["Km_Corrida"],
+        "entry.9": novo_registro["Ritmo_Min_Km"],
+        "entry.10": novo_registro["Tipo_Treino"],
+        "entry.11": novo_registro["Detalhe_Treino"]
+    }
     
-    # Atualiza a memória local do app
-    st.session_state.historico_local = df_final
-    
-    # ENVIA DE FATO PARA A NUVEM DO GOOGLE
     try:
-        conn.update(spreadsheet=URL_PLANILHA, worksheet="historico", data=df_final)
-        st.success("🔥 Sincronizado com o Google Sheets com sucesso!")
+        resposta = requests.post(URL_FORM, data=payload)
+        if resposta.status_code == 200:
+            st.success("🔥 Sincronizado com o Google Sheets com sucesso!")
+            # Alimenta a memória local para atualizar o app imediatamente na tela
+            st.session_state.historico_local = pd.concat([st.session_state.historico_local, pd.DataFrame([novo_registro])], ignore_index=True)
+        else:
+            st.error(f"Erro ao enviar dados. Status do servidor Google: {resposta.status_code}")
     except Exception as e:
-        st.error(f"Erro ao salvar na nuvem: {e}. O registro ficou guardado temporariamente.")
+        st.error(f"Falha de conexão com a nuvem: {e}")
 
-# Inicializa o estado lendo as informações direto da nuvem
+# Inicializa o estado lendo as informações direto da planilha
 if 'historico_local' not in st.session_state:
     st.session_state.historico_local = carregar_dados()
 
@@ -199,7 +202,7 @@ else:
         with c_cor2:
             ritmo_corrida = st.number_input("Se foi corrida, qual o Pace médio? (min/km):", min_value=0.0, max_value=10.0, value=0.0, step=0.01, format="%.2f")
         with c_cor3:
-            estilo_corrida = st.selectbox("Se foi corrida, qual o tipo de equilíbrio?", ["Nenhum / Calistenia", "Tiros / Intervalado", "Tempo Run (Ritmo Prova)", "Longo Progressivo", "Regenerativo"])
+            estilo_corrida = st.selectbox("Se foi corrida, qual o tipo de estímulo?", ["Nenhum / Calistenia", "Tiros / Intervalado", "Tempo Run (Ritmo Prova)", "Longo Progressivo", "Regenerativo"])
             
         botao_gravar_tudo = st.form_submit_button("💾 Gravar Atividade Concluída")
 
@@ -228,7 +231,8 @@ else:
         st.rerun()
 
     st.markdown("---")
-
+    
+  
     # Abas Visuais contendo as Fichas Técnicas
     aba_corrida, aba_treino_a, aba_treino_b, aba_mobilidade = st.tabs([
         "🏃‍♂️ PLANILHA DE CORRIDA (2x/Semana)", 
