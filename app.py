@@ -1,10 +1,71 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import date, datetime
+from datetime import date
+from streamlit_gsheets import GSheetsConnection
 
 # 1. Configuração da Página
 st.set_page_config(page_title="Dashboard Atleta 35+", layout="wide", initial_sidebar_state="expanded")
+
+# ==========================================
+# CONFIGURAÇÃO CONECTORA DO GOOGLE SHEETS
+# ==========================================
+# Link da sua planilha do Google Sheets
+URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1_JvyORAjiFa5DzhB2-VOvb0QTbWOZmX2hbOnaHShumE/edit?usp=sharing"
+
+# Criando a conexão oficial com o Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+def carregar_dados():
+    """Lê os dados em tempo real da planilha do Google Sheets usando o conector"""
+    try:
+        # Lê os dados da aba chamada 'historico'
+        df_sheets = conn.read(spreadsheet=URL_PLANILHA, worksheet="historico", ttl="0d")
+        
+        # Remove linhas totalmente vazias se houverem
+        df_sheets = df_sheets.dropna(how="all")
+        
+        # Garante a tipagem correta para evitar erros nos gráficos
+        df_sheets["Peso"] = pd.to_numeric(df_sheets["Peso"], errors='coerce').fillna(81.2)
+        df_sheets["Sono"] = pd.to_numeric(df_sheets["Sono"], errors='coerce').fillna(6.0)
+        df_sheets["Energia"] = pd.to_numeric(df_sheets["Energia"], errors='coerce').fillna(3)
+        df_sheets["Dor_Lombar"] = pd.to_numeric(df_sheets["Dor_Lombar"], errors='coerce').fillna(0)
+        df_sheets["Km_Corrida"] = pd.to_numeric(df_sheets["Km_Corrida"], errors='coerce').fillna(0.0)
+        df_sheets["Ritmo_Min_Km"] = pd.to_numeric(df_sheets["Ritmo_Min_Km"], errors='coerce').fillna(0.0)
+        return df_sheets
+    except Exception as e:
+        # Fallback de segurança com seu histórico simulado caso a planilha esteja vazia na primeira vez
+        return pd.DataFrame([
+            {"Data": "2026-06-08", "Peso": 81.2, "Treino": "Sim", "Sono": 6.0, "Energia": 4, "Dor_Lombar": 0, "Agua_Copos": 8, "Km_Corrida": 2.87, "Ritmo_Min_Km": 4.12, "Tipo_Treino": "Tiros / Intervalado", "Detalhe_Treino": "Corrida: Ritmo Forte"}
+        ])
+
+def salvar_registro_no_sheets(novo_registro):
+    """Atualiza a planilha do Google Sheets adicionando a nova linha de verdade"""
+    # Pega o dataframe atualizado da memória
+    df_atual = st.session_state.historico_local
+    
+    # Cria um dataframe com a nova linha e junta com o antigo
+    df_novo_registro = pd.DataFrame([novo_registro])
+    df_final = pd.concat([df_atual, df_novo_registro], ignore_index=True)
+    
+    # Atualiza a memória local do app
+    st.session_state.historico_local = df_final
+    
+    # ENVIA DE FATO PARA A NUVEM DO GOOGLE
+    try:
+        conn.update(spreadsheet=URL_PLANILHA, worksheet="historico", data=df_final)
+        st.success("🔥 Sincronizado com o Google Sheets com sucesso!")
+    except Exception as e:
+        st.error(f"Erro ao salvar na nuvem: {e}. O registro ficou guardado temporariamente.")
+
+# Inicializa o estado lendo as informações direto da nuvem
+if 'historico_local' not in st.session_state:
+    st.session_state.historico_local = carregar_dados()
+
+df = st.session_state.historico_local
+peso_atual = float(df["Peso"].iloc[-1]) if not df.empty else 81.2
+km_semanal = df["Km_Corrida"].tail(7).sum() if not df.empty else 0.0
+treinos_concluidos_semana = df["Treino"].tail(7).str.contains("Sim").sum() if not df.empty else 0
 
 # 2. Dados de Contexto e Metas
 HOJE = date.today()
@@ -16,24 +77,6 @@ DIAS_PARA_AGOSTO = (DATA_AGOSTO - HOJE).days
 
 PESO_INICIAL = 82.0
 PESO_META = 75.0
-
-# 3. Simulação de Banco de Dados Histórico Expandido
-if 'historico' not in st.session_state:
-    st.session_state.historico = pd.DataFrame([
-        {"Data": "2026-06-04", "Peso": 81.5, "Treino": "Sim", "Sono": 5.5, "Energia": 3, "Dor_Lombar": 1, "Agua_Copos": 6, "Km_Corrida": 0.0, "Ritmo_Min_Km": 0.0, "Tipo_Treino": "Nenhum", "Detalhe_Treino": "Treino A Concluído"},
-        {"Data": "2026-06-05", "Peso": 81.2, "Treino": "Sim", "Sono": 5.0, "Energia": 2, "Dor_Lombar": 2, "Agua_Copos": 7, "Km_Corrida": 5.0, "Ritmo_Min_Km": 5.20, "Tipo_Treino": "Tempo Run", "Detalhe_Treino": "Corrida: Tempo Run"},
-        {"Data": "2026-06-06", "Peso": 81.0, "Treino": "Sim", "Sono": 6.0, "Energia": 4, "Dor_Lombar": 0, "Agua_Copos": 8, "Km_Corrida": 0.0, "Ritmo_Min_Km": 0.0, "Tipo_Treino": "Nenhum", "Detalhe_Treino": "Treino B Concluído"},
-        {"Data": "2026-06-07", "Peso": 81.3, "Treino": "Sim", "Sono": 5.5, "Energia": 3, "Dor_Lombar": 1, "Agua_Copos": 5, "Km_Corrida": 8.0, "Ritmo_Min_Km": 5.45, "Tipo_Treino": "Longo Progressivo", "Detalhe_Treino": "Corrida: Longo Progressivo"},
-        {"Data": "2026-06-08", "Peso": 80.8, "Treino": "Sim", "Sono": 6.0, "Energia": 4, "Dor_Lombar": 0, "Agua_Copos": 8, "Km_Corrida": 0.0, "Ritmo_Min_Km": 0.0, "Tipo_Treino": "Nenhum", "Detalhe_Treino": "Treino A Concluído"},
-        {"Data": "2026-06-09", "Peso": 80.7, "Treino": "Sim", "Sono": 5.0, "Energia": 3, "Dor_Lombar": 0, "Agua_Copos": 6, "Km_Corrida": 0.0, "Ritmo_Min_Km": 0.0, "Tipo_Treino": "Nenhum", "Detalhe_Treino": "Treino B Concluído"},
-    ])
-
-df = pd.DataFrame(st.session_state.historico)
-peso_atual = float(df["Peso"].iloc[-1])
-km_semanal = df["Km_Corrida"].tail(7).sum()
-
-# Conta os treinos realizados nos últimos 7 dias
-treinos_concluidos_semana = df["Treino"].tail(7).str.contains("Sim").sum()
 
 # ==========================================
 # NAVEGAÇÃO ENTRE ABAS VIA SIDEBAR
@@ -65,8 +108,8 @@ if aba_selecionada == "🏋️ Visão Geral & Composição":
         st.metric(label="📊 Atividades (7 dias)", value=f"{treinos_concluidos_semana} sessões", delta=f"{km_semanal} km rodados")
 
     with col4:
-        status_lombar = "⚠️ Alerta" if df["Dor_Lombar"].iloc[-1] >= 2 else "✅ Estável"
-        st.metric(label="🛡️ Status da Lombar", value=status_lombar, delta=f"Dor atual: {df['Dor_Lombar'].iloc[-1]}/3", delta_color="inverse")
+        status_lombar = "⚠️ Alerta" if not df.empty and df["Dor_Lombar"].iloc[-1] >= 2 else "✅ Estável"
+        st.metric(label="🛡️ Status da Lombar", value=status_lombar, delta=f"Dor atual: {df['Dor_Lombar'].iloc[-1] if not df.empty else 0}/3", delta_color="inverse")
 
     st.markdown("---")
 
@@ -89,23 +132,23 @@ if aba_selecionada == "🏋️ Visão Geral & Composição":
         novo_registro = {
             "Data": str(HOJE), "Peso": input_peso, "Treino": input_treino, 
             "Sono": input_sono, "Energia": input_energia, "Dor_Lombar": input_lombar, 
-            "Agua_Copos": input_agua, "Km_Corrida": 0.0, "Ritmo_Min_Km": 0.0, "Tipo_Treino": "Nenhum", "Detalhe_Treino": "Apenas rotina"
+            "Agua_Copos": input_agua, "Km_Corrida": 0.0, "Ritmo_Min_Km": 0.0, "Tipo_Treino": "Nenhum", "Detalhe_Treino": "Registro Diário"
         }
-        st.session_state.historico = pd.concat([st.session_state.historico, pd.DataFrame([novo_registro])], ignore_index=True)
-        st.success("Dados de rotina salvos!")
+        salvar_registro_no_sheets(novo_registro)
         st.rerun()
 
     st.markdown("---")
-    
     st.subheader("📊 Gráficos de Evolução Muscular e Resiliência")
-    g1, g2 = st.columns(2)
-    with g1:
-        fig_peso = px.line(df, x="Data", y="Peso", title="Tendência do Peso (Rumo aos 75kg)", markers=True)
-        fig_peso.update_traces(line_color='#FF4B4B', line_width=3)
-        st.plotly_chart(fig_peso, use_container_width=True)
-    with g2:
-        fig_treino = px.histogram(df, x="Data", y="Treino", color="Treino", title="Histórico de Atividade (Constância Geral)", color_discrete_map={"Sim": "#4CAF50", "Não": "#F44336"})
-        st.plotly_chart(fig_treino, use_container_width=True)
+    
+    if not df.empty:
+        g1, g2 = st.columns(2)
+        with g1:
+            fig_peso = px.line(df, x="Data", y="Peso", title="Tendência do Peso (Rumo aos 75kg)", markers=True)
+            fig_peso.update_traces(line_color='#FF4B4B', line_width=3)
+            st.plotly_chart(fig_peso, use_container_width=True)
+        with g2:
+            fig_treino = px.histogram(df, x="Data", y="Treino", color="Treino", title="Histórico de Atividade (Constância Geral)", color_discrete_map={"Sim": "#4CAF50", "Não": "#F44336"})
+            st.plotly_chart(fig_treino, use_container_width=True)
 
 # ==========================================
 # ABA 2: EVOLUÇÃO DE CORRIDA (MÉTRICAS)
@@ -119,16 +162,16 @@ elif aba_selecionada == "📈 Evolução de Corrida (Métricas)":
     with cx1:
         st.metric(label="📈 Volume Acumulado nos Últimos 7 dias", value=f"{km_semanal} km")
     with cx2:
-        maior_longo = df["Km_Corrida"].max()
+        maior_longo = df["Km_Corrida"].max() if not df.empty else 0.0
         st.metric(label="🚀 Maior Longo Registrado", value=f"{maior_longo} km")
     with cx3:
-        ritmos_validos = df[df["Ritmo_Min_Km"] > 0]["Ritmo_Min_Km"]
+        ritmos_validos = df[df["Ritmo_Min_Km"] > 0]["Ritmo_Min_Km"] if not df.empty else pd.Series()
         melhor_ritmo = ritmos_validos.min() if not ritmos_validos.empty else 0.0
         st.metric(label="⚡ Melhor Ritmo Registrado", value=f"{melhor_ritmo:.2f} min/km")
 
     st.markdown("---")
     st.subheader("📈 Progressão de Carga Realizada (Volume vs Ritmo)")
-    df_corridas = df[df["Km_Corrida"] > 0]
+    df_corridas = df[df["Km_Corrida"] > 0] if not df.empty else pd.DataFrame()
     
     if not df_corridas.empty:
         fig_corrida = px.scatter(df_corridas, x="Data", y="Km_Corrida", size="Km_Corrida", color="Ritmo_Min_Km",
@@ -137,19 +180,16 @@ elif aba_selecionada == "📈 Evolução de Corrida (Métricas)":
                                  color_continuous_scale=px.colors.sequential.Sunset_r)
         st.plotly_chart(fig_corrida, use_container_width=True)
     else:
-        st.warning("Nenhum treino de corrida registrado no banco de dados ainda. Registre um treino na aba de Fichas!")
+        st.warning("Nenhum treino de corrida registrado.")
 
 # ==========================================
 # ABA 3: FORTALECIMENTO & FICHAS DE TREINO
 # ==========================================
 else:
     st.title("💪 Prescrição de Treinos: Calistenia & Corrida")
-    st.markdown("Foco: Otimização de tempo (25 min) para calistenia e progressão segura de volume para os 21km[cite: 32, 39].")
     st.markdown("---")
 
-    # Painel Integrado para Salvar Qualquer Tipo de Treino Concluído
     st.subheader("✅ Central de Conclusão Diária (Registrar Treino)")
-    
     with st.form("central_registro_treinos"):
         tipo_registro = st.radio("O que você treinou hoje?", ["Calistenia: TREINO A (Empurrar + Pernas)", "Calistenia: TREINO B (Puxar + Core Seguro)", "Corrida (Planilha de Meia Maratona)"])
         
@@ -159,27 +199,32 @@ else:
         with c_cor2:
             ritmo_corrida = st.number_input("Se foi corrida, qual o Pace médio? (min/km):", min_value=0.0, max_value=10.0, value=0.0, step=0.01, format="%.2f")
         with c_cor3:
-            estilo_corrida = st.selectbox("Se foi corrida, qual o tipo de estímulo?", ["Nenhum / Calistenia", "Tiros / Intervalado", "Tempo Run (Ritmo Prova)", "Longo Progressivo", "Regenerativo"])
+            estilo_corrida = st.selectbox("Se foi corrida, qual o tipo de equilíbrio?", ["Nenhum / Calistenia", "Tiros / Intervalado", "Tempo Run (Ritmo Prova)", "Longo Progressivo", "Regenerativo"])
             
-        botao_gravar_tudo = st.form_submit_button("💾 Gravar Atividade Concluída no Histórico")
+        botao_gravar_tudo = st.form_submit_button("💾 Gravar Atividade Concluída")
 
     if botao_gravar_tudo:
         if "Calistenia" in tipo_registro:
             detalhe_final = "Treino A Concluído" if "TREINO A" in tipo_registro else "Treino B Concluído"
             nova_linha = {
                 "Data": str(HOJE), "Peso": peso_atual, "Treino": "Sim", 
-                "Sono": df["Sono"].iloc[-1], "Energia": df["Energia"].iloc[-1], "Dor_Lombar": df["Dor_Lombar"].iloc[-1], 
-                "Agua_Copos": df["Agua_Copos"].iloc[-1], "Km_Corrida": 0.0, "Ritmo_Min_Km": 0.0, "Tipo_Treino": "Nenhum", "Detalhe_Treino": detalhe_final
+                "Sono": df["Sono"].iloc[-1] if not df.empty else 6.0, 
+                "Energia": df["Energia"].iloc[-1] if not df.empty else 3, 
+                "Dor_Lombar": df["Dor_Lombar"].iloc[-1] if not df.empty else 0, 
+                "Agua_Copos": df["Agua_Copos"].iloc[-1] if not df.empty else 6, 
+                "Km_Corrida": 0.0, "Ritmo_Min_Km": 0.0, "Tipo_Treino": "Nenhum", "Detalhe_Treino": detalhe_final
             }
         else:
             nova_linha = {
                 "Data": str(HOJE), "Peso": peso_atual, "Treino": "Sim", 
-                "Sono": df["Sono"].iloc[-1], "Energia": df["Energia"].iloc[-1], "Dor_Lombar": df["Dor_Lombar"].iloc[-1], 
-                "Agua_Copos": df["Agua_Copos"].iloc[-1], "Km_Corrida": km_rodados, "Ritmo_Min_Km": ritmo_corrida, "Tipo_Treino": estilo_corrida, "Detalhe_Treino": f"Corrida: {estilo_corrida}"
+                "Sono": df["Sono"].iloc[-1] if not df.empty else 6.0, 
+                "Energia": df["Energia"].iloc[-1] if not df.empty else 3, 
+                "Dor_Lombar": df["Dor_Lombar"].iloc[-1] if not df.empty else 0, 
+                "Agua_Copos": df["Agua_Copos"].iloc[-1] if not df.empty else 6, 
+                "Km_Corrida": km_rodados, "Ritmo_Min_Km": ritmo_corrida, "Tipo_Treino": estilo_corrida, "Detalhe_Treino": f"Corrida: {estilo_corrida}"
             }
             
-        st.session_state.historico = pd.concat([st.session_state.historico, pd.DataFrame([nova_linha])], ignore_index=True)
-        st.success("Atividade processada e integrada com sucesso ao painel principal!")
+        salvar_registro_no_sheets(nova_linha)
         st.rerun()
 
     st.markdown("---")
