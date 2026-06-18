@@ -37,17 +37,17 @@ def salvar_registro_no_sheets(novo_registro):
     
     # ⚠️ SUBSTITUA OS CODIGOS 'entry.XXXXX' COM OS SEUS CÓDIGOS REAIS DO FORMULÁRIO
     payload = {
-        "entry.1": novo_registro["Data"],
-        "entry.2": novo_registro["Peso"],
-        "entry.3": novo_registro["Treino"],
-        "entry.4": novo_registro["Sono"],
-        "entry.5": novo_registro["Energia"],
-        "entry.6": novo_registro["Dor_Lombar"],
-        "entry.7": novo_registro["Agua_Copos"],
-        "entry.8": novo_registro["Km_Corrida"],
-        "entry.9": novo_registro["Ritmo_Min_Km"],
-        "entry.10": novo_registro["Tipo_Treino"],
-        "entry.11": novo_registro["Detalhe_Treino"]
+        "entry.0": novo_registro["Data"],
+        "entry.1": novo_registro["Peso"],
+        "entry.2": novo_registro["Treino"],
+        "entry.3": novo_registro["Sono"],
+        "entry.4": novo_registro["Energia"],
+        "entry.5": novo_registro["Dor_Lombar"],
+        "entry.6": novo_registro["Agua_Copos"],
+        "entry.7": novo_registro["Km_Corrida"],
+        "entry.8": novo_registro["Ritmo_Min_Km"],
+        "entry.9": novo_registro["Tipo_Treino"],
+        "entry.10": novo_registro["Detalhe_Treino"]
     }
     
     try:
